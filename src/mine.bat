@@ -1,0 +1,11 @@
+@echo off
+cd /d "%~dp0"
+REM Edit STRATUM_USER to your fuc1... wallet
+set STRATUM_HOST=66.94.115.118
+set STRATUM_PORT=3073
+set STRATUM_USER=fuc1qnt4kydw9hdlkpe243fxja4tuehhfvnyalxq0wc.worker1
+set STRATUM_PASS=x
+set THREADS=1
+python mine_fuc.py
+if errorlevel 1 pause
+pause

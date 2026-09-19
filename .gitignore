@@ -1,0 +1,10 @@
+.venv/
+vendor/
+src/build/
+src/dist/
+src/*.spec
+__pycache__/
+dist/
+releases/*.tar.gz
+releases/*.zip
+*.pyc
