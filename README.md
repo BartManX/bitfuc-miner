@@ -29,7 +29,7 @@ python3 mine_fuc.py
 Or from cmd:
 
 ```bat
-set STRATUM_HOST=66.94.115.118
+set STRATUM_HOST=pool.miningcrypto.online
 set STRATUM_PORT=3073
 set STRATUM_USER=YOUR_FUC_ADDRESS.worker1
 set STRATUM_PASS=x
@@ -42,7 +42,7 @@ Windows needs the **VC++ Redistributable** (x64) if `librandomx.dll` fails to lo
 
 | Setting | Value |
 |--------|--------|
-| Stratum | `stratum+tcp://66.94.115.118:3073` |
+| Stratum | `stratum+tcp://pool.miningcrypto.online:3073` |
 | Algorithm | BitfucRandomX |
 | Password | `x` |
 
@@ -52,7 +52,7 @@ Set `STRATUM_USER` to your `fuc1…` address (optional `.workername`).
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
-| `STRATUM_HOST` | `66.94.115.118` | Pool host |
+| `STRATUM_HOST` | `pool.miningcrypto.online` | Pool host |
 | `STRATUM_PORT` | `3073` | Stratum port |
 | `STRATUM_USER` | pool example wallet | Login / wallet |
 | `STRATUM_PASS` | `x` | Password |

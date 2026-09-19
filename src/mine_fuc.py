@@ -39,7 +39,7 @@ SEED = bytes.fromhex(
 FLAGS = 2 | 8 | 96
 DIFF1 = 0x00000000FFFF0000000000000000000000000000000000000000000000000000
 
-HOST = os.environ.get("STRATUM_HOST", "66.94.115.118")
+HOST = os.environ.get("STRATUM_HOST", "pool.miningcrypto.online")
 PORT = int(os.environ.get("STRATUM_PORT", "3073"))
 USER = os.environ.get(
     "STRATUM_USER",
