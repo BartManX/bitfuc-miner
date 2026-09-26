@@ -43,7 +43,8 @@ ldd --version | head -1 || true
 "
 
 mkdir -p "$ROOT/releases"
+# Docker may leave root-owned files under dist/; fix ownership for the runner.
+sudo chown -R "$(id -u):$(id -g)" "$ROOT/dist" "$ROOT/releases" 2>/dev/null || true
 tar -C "$ROOT/dist" -czf "$ROOT/releases/${OUT}.tar.gz" "$OUT"
-cp -f "$ROOT/releases/${OUT}.tar.gz" "$ROOT/dist/"
 ls -lh "$ROOT/releases/${OUT}.tar.gz"
 echo "Built $OUT"
