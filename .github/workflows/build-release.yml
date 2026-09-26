@@ -1,0 +1,96 @@
+name: Build release binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version without v (e.g. 1.0.2)"
+        required: true
+        default: "1.0.2"
+  push:
+    tags:
+      - "v*"
+
+env:
+  RANDOMX_REF: 10494476d6236b177733224123747201dec180bb
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install PyInstaller
+        run: python -m pip install -U pip pyinstaller
+
+      - name: Build RandomX DLL
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone https://github.com/tevador/RandomX.git /tmp/RandomX
+          git -C /tmp/RandomX checkout "${RANDOMX_REF}"
+          cmake -S /tmp/RandomX -B /tmp/rxshared -DCMAKE_BUILD_TYPE=Release -DARCH=default \
+            -DCMAKE_WINDOWS_EXPORT_ALL_SYMBOLS=ON -DBUILD_SHARED_LIBS=ON \
+            -G "Visual Studio 17 2022" -A x64
+          cmake --build /tmp/rxshared --config Release --target randomx -j
+          DLL="$(find /tmp/rxshared -name '*.dll' | head -1)"
+          test -n "$DLL"
+          mkdir -p src
+          cp -f "$DLL" src/librandomx.dll
+          cp -f /tmp/RandomX/LICENSE src/LICENSE.RandomX
+          ls -la src/librandomx.dll
+
+      - name: Build mine_fuc.exe
+        working-directory: src
+        shell: bash
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console \
+            --name mine_fuc \
+            --add-binary "librandomx.dll;." \
+            mine_fuc.py
+          ls -lh dist/mine_fuc.exe
+
+      - name: Package Windows zip
+        shell: bash
+        run: |
+          set -euo pipefail
+          VER="${{ github.event.inputs.version || github.ref_name }}"
+          VER="${VER#v}"
+          OUT="bitfuc-miner-${VER}-windows-x64"
+          mkdir -p "dist/${OUT}"
+          cp -f src/dist/mine_fuc.exe src/librandomx.dll "dist/${OUT}/"
+          cp -f README.md LICENSE src/LICENSE.RandomX "dist/${OUT}/"
+          cp -f src/mine.bat "dist/${OUT}/mine.bat"
+          powershell -Command "Compress-Archive -Path 'dist/${OUT}' -DestinationPath 'dist/${OUT}.zip' -Force"
+          ls -lh "dist/${OUT}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: dist/bitfuc-miner-*-windows-x64.zip
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch RandomX sources
+        run: |
+          git clone https://github.com/tevador/RandomX.git vendor/RandomX
+          git -C vendor/RandomX checkout "${RANDOMX_REF}"
+          cp -f vendor/RandomX/LICENSE src/LICENSE.RandomX
+
+      - name: Build Linux package (Ubuntu 20.04 glibc)
+        run: |
+          VER="${{ github.event.inputs.version || github.ref_name }}"
+          VER="${VER#v}"
+          bash scripts/build-linux-compat.sh "$VER"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: releases/bitfuc-miner-*-linux-x64.tar.gz
