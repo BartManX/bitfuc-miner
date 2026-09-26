@@ -29,7 +29,7 @@ from ctypes import (
 )
 from decimal import Decimal
 
-__version__ = "1.0.2"
+__version__ = "1.1.0"
 
 # BITFUC RandomX key = SHA256("BITFUC RandomX key v1")
 SEED = bytes.fromhex(
@@ -74,7 +74,7 @@ LIB = os.environ.get("LIBRANDOMX", _default_lib())
 
 def _load_randomx():
     if not os.path.isfile(LIB):
-        sys.exit(f"RandomX library not found: {LIB}")
+        raise FileNotFoundError(f"RandomX library not found: {LIB}")
     rx = CDLL(LIB)
     rx.randomx_alloc_cache.restype = c_void_p
     rx.randomx_alloc_cache.argtypes = [c_uint]
@@ -133,22 +133,37 @@ def share_diff(h: bytes) -> float:
 
 
 class Miner:
-    def __init__(self):
+    def __init__(
+        self,
+        host: str | None = None,
+        port: int | None = None,
+        user: str | None = None,
+        password: str | None = None,
+        threads: int | None = None,
+        log=None,
+    ):
+        self.host = host or HOST
+        self.port = int(port if port is not None else PORT)
+        self.user = user or USER
+        self.password = password if password is not None else PASS
+        self.threads = max(1, int(threads if threads is not None else THREADS))
+        self._log = log or (lambda msg: print(msg, flush=True))
+
         self.rx = _load_randomx()
-        print(f"BITFUC stratum miner v{__version__}", flush=True)
-        print(f"loading RandomX from {LIB} ...", flush=True)
+        self._log(f"BITFUC stratum miner v{__version__}")
+        self._log(f"loading RandomX from {LIB} ...")
         self.cache = self.rx.randomx_alloc_cache(FLAGS)
         if not self.cache:
-            sys.exit("randomx_alloc_cache failed")
+            raise RuntimeError("randomx_alloc_cache failed")
         seed_buf = (c_ubyte * len(SEED)).from_buffer_copy(SEED)
         self.rx.randomx_init_cache(self.cache, seed_buf, len(SEED))
         self.vms = []
-        for _ in range(THREADS):
+        for _ in range(self.threads):
             vm = self.rx.randomx_create_vm(FLAGS, self.cache, c_void_p(None))
             if not vm:
-                sys.exit("randomx_create_vm failed")
+                raise RuntimeError("randomx_create_vm failed")
             self.vms.append(vm)
-        print(f"RandomX ready ({THREADS} thread(s), light mode)", flush=True)
+        self._log(f"RandomX ready ({self.threads} thread(s), light mode)")
 
         self.lock = threading.Lock()
         self.sock = None
@@ -167,6 +182,7 @@ class Miner:
         self.duplicates_skipped = 0
         self.hashes = 0
         self.stop = False
+        self._workers: list[threading.Thread] = []
 
     @staticmethod
     def _job_fingerprint(j: dict) -> tuple:
@@ -211,7 +227,7 @@ class Miner:
             ntime = int(j["ntime"], 16)
             job_id = j["job_id"]
             # Partition extranonce2 space across threads
-            for en2_i in range(thread_id, 0x1000000, THREADS):
+            for en2_i in range(thread_id, 0x1000000, self.threads):
                 if self.stop:
                     return
                 with self.lock:
@@ -230,11 +246,10 @@ class Miner:
                         self.hashes += 1
                         hcount = self.hashes
                     if hcount % 100 == 0 and thread_id == 0:
-                        print(
+                        self._log(
                             f"hashes={hcount} accepted={self.accepted} "
                             f"rejected={self.rejected} dup_skip={self.duplicates_skipped} "
-                            f"diff={d} job={job_id}",
-                            flush=True,
+                            f"diff={d} job={job_id}"
                         )
                     if meets_diff(h, d):
                         en2_hex = extranonce2.hex()
@@ -254,15 +269,14 @@ class Miner:
                                 self.job["job_id"] if self.job else job_id
                             )
                         sd = share_diff(h)
-                        print(
+                        self._log(
                             f"SHARE job={submit_job_id} nonce={nonce_hex} en2={en2_hex} "
-                            f"localDiff={sd:.6e}",
-                            flush=True,
+                            f"localDiff={sd:.6e}"
                         )
                         with self.lock:
                             self.send(
                                 "mining.submit",
-                                [USER, submit_job_id, en2_hex, ntime_hex, nonce_hex],
+                                [self.user, submit_job_id, en2_hex, ntime_hex, nonce_hex],
                                 kind="submit",
                             )
                 else:
@@ -278,11 +292,11 @@ class Miner:
             except socket.timeout:
                 continue
             except OSError:
-                print("disconnected", flush=True)
+                self._log("disconnected")
                 self.stop = True
                 return
             if not chunk:
-                print("disconnected", flush=True)
+                self._log("disconnected")
                 self.stop = True
                 return
             buf += chunk
@@ -316,70 +330,88 @@ class Miner:
                         if work_changed:
                             self.job_gen += 1
                             self.submitted.clear()
-                    print(
+                    self._log(
                         f"job {p[0]} bits={p[6]} clean={p[8] if len(p) > 8 else '?'} "
-                        f"work_changed={work_changed}",
-                        flush=True,
+                        f"work_changed={work_changed}"
                     )
                 elif msg.get("method") == "mining.set_difficulty":
                     with self.lock:
                         self.difficulty = float(msg["params"][0])
-                    print(f"difficulty -> {self.difficulty}", flush=True)
+                    self._log(f"difficulty -> {self.difficulty}")
                 elif msg.get("id") in self.pending:
                     kind = self.pending.pop(msg["id"])
                     if kind == "subscribe":
                         self.extranonce1 = msg["result"][1]
                         self.extranonce2_size = int(msg["result"][2])
-                        print(
+                        self._log(
                             f"subscribed en1={self.extranonce1} "
-                            f"en2size={self.extranonce2_size}",
-                            flush=True,
+                            f"en2size={self.extranonce2_size}"
                         )
                     elif kind == "authorize":
-                        print(f"authorize -> {msg.get('result')}", flush=True)
+                        self._log(f"authorize -> {msg.get('result')}")
                         if msg.get("error"):
-                            print(f"authorize error: {msg['error']}", flush=True)
+                            self._log(f"authorize error: {msg['error']}")
                     elif kind == "submit":
                         if msg.get("error"):
                             self.rejected += 1
-                            print(f"REJECTED: {msg['error']}", flush=True)
+                            self._log(f"REJECTED: {msg['error']}")
                         elif msg.get("result") is True:
                             self.accepted += 1
-                            print(f"SHARE ACCEPTED (total {self.accepted})", flush=True)
+                            self._log(f"SHARE ACCEPTED (total {self.accepted})")
                         else:
                             self.rejected += 1
-                            print(f"unexpected submit reply: {msg}", flush=True)
+                            self._log(f"unexpected submit reply: {msg}")
 
-    def run(self):
-        print(f"connecting {HOST}:{PORT} as {USER}", flush=True)
-        self.sock = socket.create_connection((HOST, PORT), timeout=30)
+    def start(self):
+        """Connect and start mining threads (non-blocking)."""
+        self.stop = False
+        self._log(f"connecting {self.host}:{self.port} as {self.user}")
+        self.sock = socket.create_connection((self.host, self.port), timeout=30)
         threading.Thread(target=self.reader, daemon=True).start()
-        self.send("mining.subscribe", [f"bitfuc-miner/{__version__}"], kind="subscribe")
+        self.send(
+            "mining.subscribe",
+            [f"bitfuc-miner/{__version__}"],
+            kind="subscribe",
+        )
         time.sleep(0.4)
-        self.send("mining.authorize", [USER, PASS], kind="authorize")
+        self.send("mining.authorize", [self.user, self.password], kind="authorize")
         time.sleep(0.4)
-        workers = []
+        self._workers = []
         for i, vm in enumerate(self.vms):
             t = threading.Thread(target=self.mine_worker, args=(vm, i), daemon=True)
             t.start()
-            workers.append(t)
+            self._workers.append(t)
+
+    def request_stop(self):
+        self.stop = True
+        try:
+            if self.sock:
+                self.sock.close()
+        except OSError:
+            pass
+
+    def run(self):
+        self.start()
         try:
             while not self.stop:
                 time.sleep(1)
         except KeyboardInterrupt:
-            print("\nstopping...", flush=True)
-            self.stop = True
-        for t in workers:
+            self._log("stopping...")
+            self.request_stop()
+        for t in self._workers:
             t.join(timeout=2)
-        print(
+        self._log(
             f"done accepted={self.accepted} rejected={self.rejected} "
-            f"dup_skip={self.duplicates_skipped} hashes={self.hashes}",
-            flush=True,
+            f"dup_skip={self.duplicates_skipped} hashes={self.hashes}"
         )
 
 
 def main():
-    Miner().run()
+    try:
+        Miner().run()
+    except Exception as e:
+        print(f"error: {e}", flush=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

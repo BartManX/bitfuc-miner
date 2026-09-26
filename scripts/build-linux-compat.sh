@@ -33,7 +33,7 @@ pyinstaller --noconfirm --clean --onefile --console \
   --add-binary 'librandomx.so:.' \
   mine_fuc.py
 mkdir -p \"/src/dist/${OUT}\"
-cp -f dist/mine_fuc mine_fuc.py mine.sh librandomx.so \\
+cp -f dist/mine_fuc mine_fuc.py mine_gui.py mine.sh librandomx.so \\
   \"/src/dist/${OUT}/\"
 cp -f /src/README.md /src/LICENSE \"/src/dist/${OUT}/\"
 cp -f /src/src/LICENSE.RandomX \"/src/dist/${OUT}/\" 2>/dev/null || cp -f /src/vendor/RandomX/LICENSE \"/src/dist/${OUT}/LICENSE.RandomX\"

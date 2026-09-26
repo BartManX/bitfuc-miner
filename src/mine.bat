@@ -1,19 +1,14 @@
 @echo off
 cd /d "%~dp0"
-REM Edit STRATUM_USER to your fuc1... wallet
-set STRATUM_HOST=pool.miningcrypto.online
-set STRATUM_PORT=3073
-set STRATUM_USER=fuc1qnt4kydw9hdlkpe243fxja4tuehhfvnyalxq0wc.worker1
-set STRATUM_PASS=x
-set THREADS=1
-if exist mine_fuc.exe (
+if exist bitfuc-miner.exe (
+  start "" bitfuc-miner.exe
+) else if exist mine_gui.py (
+  pythonw mine_gui.py 2>nul || python mine_gui.py
+) else if exist mine_fuc.exe (
+  echo No GUI found. CLI: set STRATUM_USER=yourwallet.worker1
   mine_fuc.exe
-) else if exist mine_fuc.py (
-  python mine_fuc.py
 ) else (
-  echo missing mine_fuc.exe / mine_fuc.py
+  echo missing bitfuc-miner.exe
   pause
   exit /b 1
 )
-if errorlevel 1 pause
-pause

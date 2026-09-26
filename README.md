@@ -1,12 +1,30 @@
 # BITFUC Stratum Miner
 
-CPU miner for **BITFUC (FUC)** pools that speak Bitcoin stratum with **RandomX** proof-of-work on the 80-byte block header.
-
-**v1.0.2:** Fixes duplicate-share rejects caused by resetting the nonce search on every stratum job rebroadcast (same block template, new job id).
+CPU miner for **BITFUC (FUC)** — Bitcoin stratum + **RandomX** header PoW.
 
 This is **not** XMRig / `rx/0`. Stock RandomX miners will not work.
 
+**v1.1.0:** GUI — enter wallet, pick Pool or Solo, click Start.  
+**v1.0.2:** Fixed duplicate-share rejects on job rebroadcasts.
+
 ## Quick start
+
+### Windows (x64) — GUI
+
+1. Unzip `bitfuc-miner-*-windows-x64.zip`
+2. Run **`bitfuc-miner.exe`** (or `mine.bat`)
+3. Paste your `fuc1…` wallet, choose **Pool** or **Solo**, set threads, **Start mining**
+
+| Mode | Port |
+|------|------|
+| Pool (PPLNS) | `3073` |
+| Solo | `3077` |
+
+Host: `pool.miningcrypto.online`
+
+CLI is still included as `mine_fuc.exe`.
+
+Windows may need the **VC++ Redistributable** (x64) if the exe fails to load.
 
 ### Linux (x86_64)
 
@@ -16,59 +34,32 @@ cd bitfuc-miner-*-linux-x64
 ./mine.sh
 ```
 
-`mine.sh` uses system `python3` when available (recommended on older VPS images). The frozen `./mine_fuc` binary is built on **Ubuntu 20.04 / glibc 2.31** and needs at least that glibc.
-
-Or with Python directly:
+GUI:
 
 ```bash
-python3 mine_fuc.py
+python3 mine_gui.py
 ```
 
-### Windows (x64)
+Frozen `./mine_fuc` is built on Ubuntu 20.04 / glibc 2.31.
 
-1. Unzip `bitfuc-miner-*-windows-x64.zip`
-2. Edit `mine.bat` if you need a different wallet, then double-click it (runs `mine_fuc.exe`).
-
-Or from cmd:
-
-```bat
-set STRATUM_HOST=pool.miningcrypto.online
-set STRATUM_PORT=3073
-set STRATUM_USER=YOUR_FUC_ADDRESS.worker1
-set STRATUM_PASS=x
-mine_fuc.exe
-```
-
-Windows needs the **VC++ Redistributable** (x64) if `librandomx.dll` / the exe fails to load. Python is **not** required for the exe build.
-
-## Default pool
-
-| Setting | Value |
-|--------|--------|
-| Stratum | `stratum+tcp://pool.miningcrypto.online:3073` |
-| Algorithm | BitfucRandomX |
-| Password | `x` |
-
-Set `STRATUM_USER` to your `fuc1…` address (optional `.workername`).
-
-## Environment variables
+## Environment variables (CLI)
 
 | Variable | Default | Meaning |
 |----------|---------|---------|
 | `STRATUM_HOST` | `pool.miningcrypto.online` | Pool host |
-| `STRATUM_PORT` | `3073` | Stratum port |
-| `STRATUM_USER` | pool example wallet | Login / wallet |
+| `STRATUM_PORT` | `3073` | Stratum port (`3077` = solo) |
+| `STRATUM_USER` | — | `fuc1….worker` |
 | `STRATUM_PASS` | `x` | Password |
 | `THREADS` | `1` | Mining threads |
-| `LIBRANDOMX` | `./librandomx.so` or `.dll` | Path to RandomX |
+| `LIBRANDOMX` | next to binary | Path to RandomX |
 
 ## Requirements
 
-- Bundled `librandomx` (tevador/RandomX, shared library)
+- Bundled `librandomx` (tevador/RandomX)
 - Light-mode RandomX (~256 MiB)
-- Fixed key: `SHA256("BITFUC RandomX key v1")`
+- Key: `SHA256("BITFUC RandomX key v1")`
 
 ## License
 
-Miner script: MIT.  
-RandomX: [BSD-style license](https://github.com/tevador/RandomX/blob/master/LICENSE) (tevador/RandomX).
+Miner: MIT.  
+RandomX: [BSD-style](https://github.com/tevador/RandomX/blob/LICENSE) (tevador/RandomX).
