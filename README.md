@@ -26,9 +26,8 @@ python3 mine_fuc.py
 
 ### Windows (x64)
 
-1. Install [Python 3](https://www.python.org/downloads/) (check “Add to PATH”).
-2. Unzip `bitfuc-miner-*-windows-x64.zip`
-3. Edit `mine.bat` if you need a different wallet, then double-click it.
+1. Unzip `bitfuc-miner-*-windows-x64.zip`
+2. Edit `mine.bat` if you need a different wallet, then double-click it (runs `mine_fuc.exe`).
 
 Or from cmd:
 
@@ -37,10 +36,10 @@ set STRATUM_HOST=pool.miningcrypto.online
 set STRATUM_PORT=3073
 set STRATUM_USER=YOUR_FUC_ADDRESS.worker1
 set STRATUM_PASS=x
-python mine_fuc.py
+mine_fuc.exe
 ```
 
-Windows needs the **VC++ Redistributable** (x64) if `librandomx.dll` fails to load.
+Windows needs the **VC++ Redistributable** (x64) if `librandomx.dll` / the exe fails to load. Python is **not** required for the exe build.
 
 ## Default pool
 
