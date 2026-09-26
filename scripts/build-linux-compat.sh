@@ -25,18 +25,21 @@ ls -la /src/src/librandomx.so
 ldd /src/src/librandomx.so || true
 objdump -T /src/src/librandomx.so | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -5 || true
 
-
 cd /src/src
 rm -rf build dist
-pyinstaller --noconfirm --clean mine_fuc.spec
+# Prefer CLI over .spec so missing SO name can't confuse Analysis
+pyinstaller --noconfirm --clean --onefile --console \
+  --name mine_fuc \
+  --add-binary 'librandomx.so:.' \
+  mine_fuc.py
 mkdir -p \"/src/dist/${OUT}\"
 cp -f dist/mine_fuc mine_fuc.py mine.sh librandomx.so \\
   \"/src/dist/${OUT}/\"
 cp -f /src/README.md /src/LICENSE \"/src/dist/${OUT}/\"
-cp -f LICENSE.RandomX \"/src/dist/${OUT}/\"
+cp -f /src/src/LICENSE.RandomX \"/src/dist/${OUT}/\" 2>/dev/null || cp -f /src/vendor/RandomX/LICENSE \"/src/dist/${OUT}/LICENSE.RandomX\"
 chmod +x \"/src/dist/${OUT}/mine_fuc\" \"/src/dist/${OUT}/mine.sh\" \"/src/dist/${OUT}/mine_fuc.py\"
-ldd --version | head -1
-objdump -T dist/mine_fuc 2>/dev/null | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -5 || true
+ldd --version | head -1 || true
+(objdump -T dist/mine_fuc 2>/dev/null | grep -o 'GLIBC_[0-9.]*' | sort -Vu | tail -5) || true
 "
 
 mkdir -p "$ROOT/releases"
