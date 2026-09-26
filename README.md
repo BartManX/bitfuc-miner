@@ -2,6 +2,8 @@
 
 CPU miner for **BITFUC (FUC)** pools that speak Bitcoin stratum with **RandomX** proof-of-work on the 80-byte block header.
 
+**v1.0.2:** Fixes duplicate-share rejects caused by resetting the nonce search on every stratum job rebroadcast (same block template, new job id).
+
 This is **not** XMRig / `rx/0`. Stock RandomX miners will not work.
 
 ## Quick start
@@ -11,10 +13,12 @@ This is **not** XMRig / `rx/0`. Stock RandomX miners will not work.
 ```bash
 tar xzf bitfuc-miner-*-linux-x64.tar.gz
 cd bitfuc-miner-*-linux-x64
-./mine_fuc
+./mine.sh
 ```
 
-Or with Python:
+`mine.sh` uses system `python3` when available (recommended on older VPS images). The frozen `./mine_fuc` binary is built on **Ubuntu 20.04 / glibc 2.31** and needs at least that glibc.
+
+Or with Python directly:
 
 ```bash
 python3 mine_fuc.py

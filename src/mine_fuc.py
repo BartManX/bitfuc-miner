@@ -29,7 +29,7 @@ from ctypes import (
 )
 from decimal import Decimal
 
-__version__ = "1.0.0"
+__version__ = "1.0.2"
 
 # BITFUC RandomX key = SHA256("BITFUC RandomX key v1")
 SEED = bytes.fromhex(
@@ -118,6 +118,8 @@ def build_header(j, en1: str, extranonce2: bytes, ntime: int, nonce: int) -> byt
 
 
 def meets_diff(h: bytes, difficulty: float) -> bool:
+    if difficulty is None or difficulty <= 0:
+        return False
     hv = int.from_bytes(h, "little")
     target = int(Decimal(DIFF1) / Decimal(str(difficulty)))
     return hv <= target
@@ -157,10 +159,27 @@ class Miner:
         self.difficulty = 1e-7
         self.req_id = 1
         self.pending = {}
+        # Pool dupe-checks en1+en2+ntime+nonce per job. We also key without job_id so
+        # a template rebroadcast (new job_id, same work) cannot resubmit the same nonces.
+        self.submitted: set[tuple[str, str, str]] = set()
         self.accepted = 0
         self.rejected = 0
+        self.duplicates_skipped = 0
         self.hashes = 0
         self.stop = False
+
+    @staticmethod
+    def _job_fingerprint(j: dict) -> tuple:
+        """Block template identity (not job_id)."""
+        return (
+            j.get("prevhash"),
+            j.get("coinb1"),
+            j.get("coinb2"),
+            tuple(j.get("merkle") or ()),
+            j.get("version"),
+            j.get("nbits"),
+            j.get("ntime"),
+        )
 
     def rxhash(self, vm, data: bytes) -> bytes:
         inp = (c_ubyte * len(data)).from_buffer_copy(data)
@@ -213,26 +232,42 @@ class Miner:
                     if hcount % 100 == 0 and thread_id == 0:
                         print(
                             f"hashes={hcount} accepted={self.accepted} "
-                            f"rejected={self.rejected} diff={d} job={job_id}",
+                            f"rejected={self.rejected} dup_skip={self.duplicates_skipped} "
+                            f"diff={d} job={job_id}",
                             flush=True,
                         )
                     if meets_diff(h, d):
                         en2_hex = extranonce2.hex()
                         ntime_hex = f"{ntime:08x}"
                         nonce_hex = f"{nonce:08x}"
+                        key = (en2_hex, ntime_hex, nonce_hex)
+                        with self.lock:
+                            if key in self.submitted:
+                                self.duplicates_skipped += 1
+                                continue
+                            self.submitted.add(key)
+                            if len(self.submitted) > 50000:
+                                self.submitted.clear()
+                                self.submitted.add(key)
+                            # Prefer latest job_id (rebroadcast may change id without new work)
+                            submit_job_id = (
+                                self.job["job_id"] if self.job else job_id
+                            )
                         sd = share_diff(h)
                         print(
-                            f"SHARE job={job_id} nonce={nonce_hex} en2={en2_hex} "
+                            f"SHARE job={submit_job_id} nonce={nonce_hex} en2={en2_hex} "
                             f"localDiff={sd:.6e}",
                             flush=True,
                         )
                         with self.lock:
                             self.send(
                                 "mining.submit",
-                                [USER, job_id, en2_hex, ntime_hex, nonce_hex],
+                                [USER, submit_job_id, en2_hex, ntime_hex, nonce_hex],
                                 kind="submit",
                             )
-                        time.sleep(0.2)
+                else:
+                    continue
+                break  # job_gen changed — restart outer while with new job
 
     def reader(self):
         buf = b""
@@ -258,19 +293,34 @@ class Miner:
                 msg = json.loads(line.decode())
                 if msg.get("method") == "mining.notify":
                     p = msg["params"]
+                    new_job = {
+                        "job_id": p[0],
+                        "prevhash": p[1],
+                        "coinb1": p[2],
+                        "coinb2": p[3],
+                        "merkle": p[4],
+                        "version": p[5],
+                        "nbits": p[6],
+                        "ntime": p[7],
+                    }
                     with self.lock:
-                        self.job = {
-                            "job_id": p[0],
-                            "prevhash": p[1],
-                            "coinb1": p[2],
-                            "coinb2": p[3],
-                            "merkle": p[4],
-                            "version": p[5],
-                            "nbits": p[6],
-                            "ntime": p[7],
-                        }
-                        self.job_gen += 1
-                    print(f"job {p[0]} bits={p[6]} clean={p[8]}", flush=True)
+                        old = self.job
+                        work_changed = (
+                            old is None
+                            or self._job_fingerprint(old) != self._job_fingerprint(new_job)
+                        )
+                        self.job = new_job
+                        # Only restart nonce search when the template actually changes.
+                        # Miningcore rebroadcasts assign a new job_id for the same work;
+                        # resetting on that caused duplicate share rejects.
+                        if work_changed:
+                            self.job_gen += 1
+                            self.submitted.clear()
+                    print(
+                        f"job {p[0]} bits={p[6]} clean={p[8] if len(p) > 8 else '?'} "
+                        f"work_changed={work_changed}",
+                        flush=True,
+                    )
                 elif msg.get("method") == "mining.set_difficulty":
                     with self.lock:
                         self.difficulty = float(msg["params"][0])
@@ -322,7 +372,8 @@ class Miner:
         for t in workers:
             t.join(timeout=2)
         print(
-            f"done accepted={self.accepted} rejected={self.rejected} hashes={self.hashes}",
+            f"done accepted={self.accepted} rejected={self.rejected} "
+            f"dup_skip={self.duplicates_skipped} hashes={self.hashes}",
             flush=True,
         )
 
